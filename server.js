@@ -1,3 +1,4 @@
+const { query } = require('express');
 const express = require('express');
 const mysql = require('mysql2');
 const PORT = process.env.PORT || 3001;
@@ -21,18 +22,69 @@ const db = mysql.createConnection(
     console.log('Connected to the election database.')
 );
 
+// Get all parties
+app.get('/api/parties', (req, res) => {
+    const sql = `SELECT * FROM parties`;
+    db.query(sql, (err, rows) => {
+        if(err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        res.json({
+            message: 'success',
+            data: rows
+        });
+    });
+});
 
+// Get a single party
+app.get('/api/parties/:id', (req, res) => {
+    const sql = `SELECT * FROM parties WHERE id = ?`;
+    const params = [req.params.id];
 
+    db.query(sql, params, (err, row) => {
+        if(err) {
+            res.status(400).json({ error: err.message });
+            return;
+        }
+        res.json({
+            message: 'success',
+            data: row 
+        });
+    });
+});
 
+// Delete from party
+app.delete('/api/parties/:id', (req, res) => {
+    const sql = `DELETE FROM parties WHERE id = ?`;
+    const params = [req.params.id];
+
+    db.query(sql, params, (err, result) => {
+        if (err) {
+            res.status(400).json({ error: res.message });
+            // checks if anything was deleted
+        } else if (!result.affectedRows) {
+            res.json({
+                message: "Party not found"
+            });
+        } else {
+            res.json({
+                message: 'deleted',
+                changes: result.affectedRows,
+                id: req.params.id
+            });
+        }
+    });
+});
 
 
 // Get all candidates
 app.get('/api/candidates', (req, res) => {
-    const sql = `SELECT candidates.*, parties.name
-                AS party_name
-                FROM candidates
-                LEFT JOIN parties
-                ON candidates.party_id = parties.id`;
+    const sql = `SELECT candidates.*, parties.name 
+    AS party_name 
+    FROM candidates 
+    LEFT JOIN parties 
+    ON candidates.party_id = parties.id`;
 
     db.query(sql, (err, rows) => {
         if(err) {
@@ -51,11 +103,11 @@ app.get('/api/candidates', (req, res) => {
 // GET a single candidate
 app.get('/api/candidate/:id', (req, res) => {
     const sql = `SELECT candidates.*, parties.name 
-                AS party_name 
-                FROM candidates 
-                LEFT JOIN parties 
-                ON candidates.party_id = parties.id 
-                WHERE candidates.id = ?`;    
+             AS party_name 
+             FROM candidates 
+             LEFT JOIN parties 
+             ON candidates.party_id = parties.id 
+             WHERE candidates.id = ?`;    
     const params = [req.params.id];
 
     db.query(sql, params, (err, row) => {
@@ -114,6 +166,35 @@ app.post('/api/candidate', ({ body }, res) => { // why don't we use req.body ins
       });
     });
 });
+
+// Update a candidate's party
+app.put('/api/candidate/:id', (req, res) => {
+    const errors = inputCheck(req.body, 'party_id');
+
+        if (errors) {
+        res.status(400).json({ error: errors });
+        return;
+    }
+    const sql = `UPDATE candidates SET party_id = ? 
+                 WHERE id = ?`;
+    const params = [req.body.party_id, req.params.id];
+    db.query(sql, params, (err, result) => {
+      if (err) {
+        res.status(400).json({ error: err.message });
+        // check if a record was found
+      } else if (!result.affectedRows) {
+        res.json({
+          message: 'Candidate not found'
+        });
+      } else {
+        res.json({
+          message: 'success',
+          data: req.body,
+          changes: result.affectedRows
+        });
+      }
+    });
+  });
 
 // Default response for any other request (Not Found) - needs to be the last route so it doesn't override others * catchall
 app.use((req, res) => {
